@@ -9,6 +9,7 @@ import os
 import re
 import hashlib
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import anthropic
@@ -146,10 +147,22 @@ async def send_report(client: TelegramClient, report: str):
     await client.send_message(MY_TELEGRAM_ID, report, parse_mode="markdown")
 
 # ── main ──────────────────────────────────────────────────────────────────────
+SEND_HOURS = {7, 20}  # שעות שליחה בשעון ישראל
+
+def is_send_time() -> bool:
+    """מחזיר True רק אם השעה הנוכחית בישראל היא אחת משעות השליחה"""
+    il_time = datetime.now(ZoneInfo("Asia/Jerusalem"))
+    return il_time.hour in SEND_HOURS
+
 async def main():
     from telethon.sessions import StringSession
 
-    print(f"[{datetime.now().strftime('%H:%M')}] מתחיל הרצה...")
+    il_now = datetime.now(ZoneInfo("Asia/Jerusalem"))
+    print(f"[{il_now.strftime('%H:%M')} ישראל] מתחיל הרצה...")
+
+    if not is_send_time():
+        print(f"השעה {il_now.hour}:00 — לא שעת שליחה ({SEND_HOURS}), יוצא.")
+        return
 
     async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as tg:
         # קריאת הודעות
