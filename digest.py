@@ -169,7 +169,7 @@ def build_prompt(messages: list[dict], memory: dict) -> str:
 async def process_with_ai(prompt: str) -> str:
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     msg = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}]
     )
