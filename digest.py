@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import anthropic
-import httpx
 from telethon import TelegramClient
 from telethon.tl.types import Channel, Chat
 
@@ -21,12 +20,7 @@ API_ID = int(os.environ["TELEGRAM_API_ID"])
 API_HASH = os.environ["TELEGRAM_API_HASH"]
 SESSION_STRING = os.environ["TELEGRAM_SESSION"]      # StringSession מוצפן
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-WEATHER_API_KEY = os.environ["OPENWEATHER_API_KEY"]  # OpenWeatherMap (חינם)
 MY_TELEGRAM_ID = int(os.environ["MY_TELEGRAM_ID"])   # ה-User ID שלך
-
-CITY = "Giv'at Shmuel"
-CITY_HE = "גבעת שמואל"
-LAT, LON = 32.0794, 34.8489
 
 MEMORY_FILE = Path("seen_news.json")
 HOURS_LOOKBACK = 13   # כמה שעות אחורה לקרוא מכל ערוץ
@@ -58,38 +52,6 @@ def add_to_memory(memory: dict, text: str):
         "ts": datetime.now(timezone.utc).isoformat(),
         "preview": text[:80]
     })
-
-# ── מזג אוויר ────────────────────────────────────────────────────────────────
-async def get_weather() -> str:
-    url = (
-        f"https://api.openweathermap.org/data/2.5/forecast"
-        f"?lat={LAT}&lon={LON}&appid={WEATHER_API_KEY}&units=metric&lang=he&cnt=16"
-    )
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-
-    def summarize_day(items):
-        temps = [i["main"]["temp"] for i in items]
-        descs = [i["weather"][0]["description"] for i in items]
-        rain = sum(i.get("rain", {}).get("3h", 0) for i in items)
-        desc = max(set(descs), key=descs.count)
-        return f"{desc}, {min(temps):.0f}°–{max(temps):.0f}°C" + (f", גשם {rain:.1f}מ\"מ" if rain > 0 else "")
-
-    forecasts = data["list"]
-    now = datetime.now()
-    today_items = [f for f in forecasts if datetime.fromtimestamp(f["dt"]).date() == now.date()]
-    tomorrow_items = [f for f in forecasts if datetime.fromtimestamp(f["dt"]).date() == (now + timedelta(days=1)).date()]
-
-    today_str = summarize_day(today_items) if today_items else "אין נתונים"
-    tomorrow_str = summarize_day(tomorrow_items) if tomorrow_items else "אין נתונים"
-
-    return (
-        f"🌤️ *מזג האוויר — {CITY_HE}*\n"
-        f"היום: {today_str}\n"
-        f"מחר: {tomorrow_str}"
-    )
 
 # ── קריאת הודעות מטלגרם ──────────────────────────────────────────────────────
 async def fetch_messages(client: TelegramClient) -> list[dict]:
@@ -158,7 +120,11 @@ def build_prompt(messages: list[dict], memory: dict) -> str:
 • אל תכלול חדשות חוזרות, אזעקות, או עדכונים שוליים
 • אם יש כמה ידיעות על אותו נושא — אחד אותן לידיעה אחת
 
-**חלק ב׳ — הרחבת אופקים**
+**חלק ב׳ — מזג אוויר** (אם יש מידע רלוונטי בהודעות)
+• אם נמצא מידע על מזג האוויר — סכם אותו בשורה אחת
+• אם אין — השמט חלק זה לחלוטין
+
+**חלק ג׳ — הרחבת אופקים**
 • 2–4 פריטים מעניינים שאינם חדשות שוטפות
 • נושאים: ניתוחים, כלכלה, טכנולוגיה, גיאופוליטיקה, תרבות
 • כל פריט: כותרת + 2–3 משפטי הסבר
@@ -186,12 +152,6 @@ async def main():
     print(f"[{datetime.now().strftime('%H:%M')}] מתחיל הרצה...")
 
     async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as tg:
-        # מזג אוויר
-        try:
-            weather = await get_weather()
-        except Exception as e:
-            weather = f"🌤️ לא ניתן לטעון מזג אוויר ({e})"
-
         # קריאת הודעות
         print("קורא הודעות מטלגרם...")
         messages = await fetch_messages(tg)
@@ -217,7 +177,7 @@ async def main():
 
         # הרכבת הדוח הסופי
         now_he = datetime.now().strftime("%d/%m/%Y %H:%M")
-        full_report = f"📋 *דוח חדשות — {now_he}*\n\n{weather}\n\n{news_digest}"
+        full_report = f"📋 *דוח חדשות — {now_he}*\n\n{news_digest}"
 
         # שליחה
         print("שולח דוח...")
