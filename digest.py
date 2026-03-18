@@ -144,7 +144,23 @@ async def process_with_ai(prompt: str) -> str:
 
 # ── שליחת הדוח ───────────────────────────────────────────────────────────────
 async def send_report(client: TelegramClient, report: str):
-    await client.send_message(MY_TELEGRAM_ID, report, parse_mode="markdown")
+    MAX_LEN = 4000
+    if len(report) <= MAX_LEN:
+        await client.send_message(MY_TELEGRAM_ID, report, parse_mode="markdown")
+    else:
+        # פיצול לפי פסקאות כדי לא לחתוך באמצע משפט
+        parts = []
+        current = ""
+        for line in report.splitlines(keepends=True):
+            if len(current) + len(line) > MAX_LEN:
+                parts.append(current)
+                current = line
+            else:
+                current += line
+        if current:
+            parts.append(current)
+        for part in parts:
+            await client.send_message(MY_TELEGRAM_ID, part.strip(), parse_mode="markdown")
 
 # ── main ──────────────────────────────────────────────────────────────────────
 async def main():
